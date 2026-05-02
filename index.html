@@ -1164,18 +1164,7 @@ function initMap() {
   // Grupo de marcadores (fácil de limpiar y regenerar)
   APP.markerGroup = L.layerGroup().addTo(APP.map);
 }
-function initMap() {
-  // ... todo lo que ya tienes ...
 
-  // Definimos los mapas que queremos elegir (esto debería estar definido arriba, pero por si acaso)
-  const baseMaps = {
-    "Mapa Base": APP.currentBase,
-    // "Satélite": (aquí iría la de satélite si la tienes)
-  };
-
-  // AGREGA ESTO AQUÍ:
-  L.control.layers(baseMaps, null, { position: 'bottomright' }).addTo(APP.map);
-}
 /* ═══════════════════════════════════════════════════════════
    CAMBIO DE CAPA BASE DEL MAPA
 ═══════════════════════════════════════════════════════════ */
