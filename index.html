@@ -510,16 +510,10 @@
       #legend-float { display: none !important; }
 
       /* Empujar el control del "Mapa Base" hacia abajo para que no tape las estadísticas */
-/* Forzar que la esquina superior derecha del mapa baje */
-      .leaflet-top.leaflet-right { 
-         top: 95px !important; 
+/* El empujón definitivo e invisible */
+      .leaflet-top.leaflet-right {
+         padding-top: 90px !important; 
       }
-      
-      /* Empujar directamente la caja del menú por si lo anterior falla */
-      .leaflet-control-layers {
-         margin-top: 10px !important;
-      }
-
       /* Hacer que el cajón de reportes pase por encima del botón azul al abrirse */
       #drawer-panel { 
          z-index: 2000 !important; 
