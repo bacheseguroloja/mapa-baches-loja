@@ -543,10 +543,9 @@
       #header { padding: 0 10px; gap: 8px; }
     }
 
-    /* Truco de magia: Forzamos la esquina superior derecha a irse hacia abajo */
+  /* Mover el menú de capas a la fuerza bruta */
       .leaflet-top.leaflet-right {
-         top: auto !important;
-         bottom: 110px !important; 
+         transform: translateY(90px) !important;
       }
     /* ═══════════════════════════════════════════════════════
        MOBILE: Estadísticas flotantes sobre el mapa
