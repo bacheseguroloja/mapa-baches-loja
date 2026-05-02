@@ -1146,25 +1146,43 @@ function construirPopup(row, info) {
    INICIALIZACIÓN DEL MAPA LEAFLET
 ═══════════════════════════════════════════════════════════ */
 function initMap() {
+
   APP.map = L.map('map', {
+
     center:      CFG.MAP_CENTER,
+
     zoom:        CFG.MAP_ZOOM,
+
     zoomControl: false,
+
   });
 
+
+
   // Zoom control en esquina inferior izquierda
+
   L.control.zoom({ position: 'bottomleft' }).addTo(APP.map);
 
+
+
   // Capa base inicial: Voyager (CartoDB Estándar — más limpio que OSM por defecto)
+
   APP.currentBase = L.tileLayer(TILES.voyager.url, {
+
     attribution: TILES.voyager.attr,
+
     ...TILES.voyager.opts,
+
   }).addTo(APP.map);
 
-  // Grupo de marcadores (fácil de limpiar y regenerar)
-  APP.markerGroup = L.layerGroup().addTo(APP.map);
-}
 
+
+  // Grupo de marcadores (fácil de limpiar y regenerar)
+
+  APP.markerGroup = L.layerGroup().addTo(APP.map);
+
+}
+  
 /* ═══════════════════════════════════════════════════════════
    CAMBIO DE CAPA BASE DEL MAPA
 ═══════════════════════════════════════════════════════════ */
