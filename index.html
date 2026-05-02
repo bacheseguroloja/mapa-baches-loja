@@ -543,9 +543,23 @@
       #header { padding: 0 10px; gap: 8px; }
     }
 
-/* Empujar el botón específicamente con un margen gigante */
-      .leaflet-top .leaflet-control-layers {
-         margin-top: 150px !important;
+/* 1. Forzamos al contenedor de la derecha a dejar espacio arriba */
+      .leaflet-right {
+         padding-top: 160px !important; /* Espacio para que bajen las estadísticas */
+         display: flex !important;
+         flex-direction: column !important;
+         align-items: flex-end !important;
+      }
+
+      /* 2. Empujamos el botón de Mapa Base específicamente */
+      .leaflet-control-layers {
+         margin-top: 10px !important;
+         margin-right: 10px !important;
+      }
+
+      /* 3. Nos aseguramos de que nada lo regrese a su sitio */
+      .leaflet-top.leaflet-right {
+         top: 0 !important;
       }
     /* ═══════════════════════════════════════════════════════
        MOBILE: Estadísticas flotantes sobre el mapa
