@@ -509,6 +509,21 @@
       /* Ocultar leyenda flotante para dar más espacio visual al mapa */
       #legend-float { display: none !important; }
 
+      /* Empujar el control del "Mapa Base" hacia abajo para que no tape las estadísticas */
+      .leaflet-top { 
+         top: 85px !important; 
+      }
+
+      /* Hacer que el cajón de reportes pase por encima del botón azul al abrirse */
+      #drawer-panel { 
+         z-index: 2000 !important; 
+      }
+      
+      /* Darle un espacio al fondo de la lista de reportes para poder hacer scroll cómodo */
+      #drawer-panel > div:last-child { 
+         padding-bottom: 90px !important; 
+      }
+
       /* Ajustes del Cuadro Blanco (Popup) para que no se salga de la pantalla */
       .leaflet-popup-content { width: 230px !important; margin: 0 !important; }
       .leaflet-popup-content > div > div:first-child { height: 115px !important; }
