@@ -1509,9 +1509,43 @@ document.addEventListener('DOMContentLoaded', () => {
   // 1. Inicializar mapa
   initMap();
 
-  // 2. Cargar datos desde el CSV
-  loadData();
+  /* ═══════════════════════════════════════════════════════════
+   CARGA DE DATOS (PapaParse → Google Sheets CSV)
+═══════════════════════════════════════════════════════════ */
+function loadData() {
+  mostrarCargando(true);
+  ocultarError();
 
+  // Truco para evitar el caché: añadimos un número único al final de la URL
+  const urlSinCache = CFG.CSV_URL + '&t=' + new Date().getTime();
+
+  Papa.parse(urlSinCache, {
+    download:       true,
+    header:         true,   // La primera fila son encabezados
+    skipEmptyLines: true,
+    complete: (resultado) => {
+      if (!resultado.data || resultado.data.length === 0) {
+        mostrarCargando(false);
+        mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
+        return;
+      }
+
+      // Guardar todos los datos en el estado global
+      APP.allData      = resultado.data;
+      APP.filteredData = [...APP.allData];
+
+      // Actualizar UI
+      actualizarEstadisticas();
+      aplicarFiltros();
+      mostrarCargando(false);
+    },
+    error: (err) => {
+      console.error('[BacheSeguro] Error al parsear CSV:', err);
+      mostrarCargando(false);
+      mostrarError('No se pudo conectar con la fuente de datos. Verifica tu conexión e intenta de nuevo.');
+    },
+  });
+}
   // 3. Cerrar drawer al tocar el mapa en mobile
   document.getElementById('map').addEventListener('click', () => {
     if (APP.drawerOpen) cerrarDrawer();
