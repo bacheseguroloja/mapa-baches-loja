@@ -1474,31 +1474,40 @@ function loadData() {
   mostrarCargando(true);
   ocultarError();
 
-  // ── Reemplaza esta URL con la que te dio Apps Script ──────
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/TU_ID_AQUI/exec';
-  // ─────────────────────────────────────────────────────────
+  // Añadir timestamp a la URL → el navegador no usa caché
+  // (Google ignora el parámetro desconocido y sirve el CSV igual)
+  const urlFresh = CFG.CSV_URL + '&nocache=' + Date.now();
 
-  fetch(APPS_SCRIPT_URL, { cache: 'no-store' })
+  fetch(urlFresh)           // ← Sin opciones: GET simple, sin headers extra → sin preflight CORS
     .then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json(); // Ya viene como JSON, no necesita PapaParse
+      return res.text();    // Obtener el CSV como texto
     })
-    .then(datos => {
-      if (!datos || datos.length === 0) {
-        mostrarCargando(false);
-        mostrarError('El archivo está vacío o no contiene datos válidos.');
-        return;
-      }
-
-      APP.allData      = datos;
-      APP.filteredData = [...datos];
-
-      actualizarEstadisticas();
-      aplicarFiltros();
-      mostrarCargando(false);
+    .then(csvText => {
+      Papa.parse(csvText, {
+        header:         true,
+        skipEmptyLines: true,
+        complete: (resultado) => {
+          if (!resultado.data || resultado.data.length === 0) {
+            mostrarCargando(false);
+            mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
+            return;
+          }
+          APP.allData      = resultado.data;
+          APP.filteredData = [...APP.allData];
+          actualizarEstadisticas();
+          aplicarFiltros();
+          mostrarCargando(false);
+        },
+        error: (err) => {
+          console.error('[BacheSeguro] Error al parsear CSV:', err);
+          mostrarCargando(false);
+          mostrarError('Error al procesar los datos. Intenta de nuevo.');
+        },
+      });
     })
     .catch(err => {
-      console.error('[BacheSeguro] Error:', err);
+      console.error('[BacheSeguro] Error al descargar CSV:', err);
       mostrarCargando(false);
       mostrarError('No se pudo conectar con la fuente de datos. Verifica tu conexión e intenta de nuevo.');
     });
