@@ -1476,11 +1476,8 @@ function loadData() {
 
   // Añadir timestamp a la URL → el navegador no usa caché
   // (Google ignora el parámetro desconocido y sirve el CSV igual)
-  const urlSinCache = CFG.CSV_URL + '&t=' + new Date().getTime();
+  const urlFresh = CFG.CSV_URL + '&nocache=' + Date.now();
 
-Papa.parse(urlSinCache, {
-   download: true,
-  
   fetch(urlFresh)           // ← Sin opciones: GET simple, sin headers extra → sin preflight CORS
     .then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
