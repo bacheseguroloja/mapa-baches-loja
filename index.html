@@ -1516,33 +1516,30 @@ function loadData() {
   mostrarCargando(true);
   ocultarError();
 
-  // Truco para evitar el caché: añadimos un número único al final de la URL
-  const urlSinCache = CFG.CSV_URL + '&t=' + new Date().getTime();
+  // Esta línea crea la URL limpia y le suma el tiempo para que no use el caché
+  const urlFinal = CFG.CSV_URL + "&cachebuster=" + Date.now();
 
-  Papa.parse(urlSinCache, {
+  Papa.parse(urlFinal, {
     download:       true,
-    header:         true,   // La primera fila son encabezados
+    header:         true,
     skipEmptyLines: true,
     complete: (resultado) => {
+      console.log("Datos cargados:", resultado.data); // Esto nos dirá en la consola si bajó algo
       if (!resultado.data || resultado.data.length === 0) {
         mostrarCargando(false);
-        mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
+        mostrarError('El archivo CSV está vacío.');
         return;
       }
-
-      // Guardar todos los datos en el estado global
       APP.allData      = resultado.data;
       APP.filteredData = [...APP.allData];
-
-      // Actualizar UI
       actualizarEstadisticas();
       aplicarFiltros();
       mostrarCargando(false);
     },
     error: (err) => {
-      console.error('[BacheSeguro] Error al parsear CSV:', err);
+      console.error('Error:', err);
       mostrarCargando(false);
-      mostrarError('No se pudo conectar con la fuente de datos. Verifica tu conexión e intenta de nuevo.');
+      mostrarError('No se pudo conectar con el Excel.');
     },
   });
 }
