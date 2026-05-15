@@ -1474,32 +1474,48 @@ function loadData() {
   mostrarCargando(true);
   ocultarError();
 
-  Papa.parse(CFG.CSV_URL, {
-    download:       true,
-    header:         true,   // La primera fila son encabezados
-    skipEmptyLines: true,
-    complete: (resultado) => {
-      if (!resultado.data || resultado.data.length === 0) {
-        mostrarCargando(false);
-        mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
-        return;
+  fetch(CFG.CSV_URL, {
+    // 'no-store' = ignorar caché local Y no guardar la respuesta nueva.
+    // No modifica la URL → no dispara preflight CORS con Google.
+    cache: 'no-store',
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} — ${response.statusText}`);
       }
+      return response.text(); // Obtener el CSV como texto plano
+    })
+    .then(csvText => {
+      // PapaParse procesa el texto (no descarga nada por su cuenta)
+      Papa.parse(csvText, {
+        header:         true,
+        skipEmptyLines: true,
+        complete: (resultado) => {
+          if (!resultado.data || resultado.data.length === 0) {
+            mostrarCargando(false);
+            mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
+            return;
+          }
 
-      // Guardar todos los datos en el estado global
-      APP.allData      = resultado.data;
-      APP.filteredData = [...APP.allData];
+          APP.allData      = resultado.data;
+          APP.filteredData = [...APP.allData];
 
-      // Actualizar UI
-      actualizarEstadisticas();
-      aplicarFiltros();
-      mostrarCargando(false);
-    },
-    error: (err) => {
-      console.error('[BacheSeguro] Error al parsear CSV:', err);
+          actualizarEstadisticas();
+          aplicarFiltros();
+          mostrarCargando(false);
+        },
+        error: (err) => {
+          console.error('[BacheSeguro] Error al parsear CSV:', err);
+          mostrarCargando(false);
+          mostrarError('Error al procesar los datos. Intenta de nuevo.');
+        },
+      });
+    })
+    .catch(err => {
+      console.error('[BacheSeguro] Error al descargar CSV:', err);
       mostrarCargando(false);
       mostrarError('No se pudo conectar con la fuente de datos. Verifica tu conexión e intenta de nuevo.');
-    },
-  });
+    });
 }
 
 /* ═══════════════════════════════════════════════════════════
