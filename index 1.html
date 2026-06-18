@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BacheSeguro Loja — Monitoreo Vial Ciudadano</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- ── Google Fonts: Outfit (display) + DM Mono (datos numéricos) ── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- ── Leaflet CSS ── -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- ── Tailwind CSS vía CDN ── -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ── PapaParse: manejo robusto de CSV ── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <!-- ── Leaflet JS ── -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* ═══════════════════════════════════════════════════════
+       VARIABLES DE DISEÑO (tokens del sistema)
+    ═══════════════════════════════════════════════════════ */
+    :root {
+      --bg:          #0b0f1a;
+      --surface:     #111827;
+      --surface2:    #1a2236;
+      --surface3:    #1f2d45;
+      --border:      rgba(255,255,255,0.07);
+      --border2:     rgba(255,255,255,0.12);
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --text-sub:    #94a3b8;
+      --accent:      #38bdf8;
+      --red:         #ef4444;
+      --orange:      #f59e0b;
+      --brown:       #92400e;
+      --brown-light: #d97706;
+      --green:       #10b981;
+      --telegram:    #2AABEE;
+      --radius:      14px;
+      --header-h:    56px;
+    }
+
+    /* ── Reset y base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       LAYOUT PRINCIPAL
+    ═══════════════════════════════════════════════════════ */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    #header {
+      height: var(--header-h);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 1000;
+      position: relative;
+    }
+
+    .logo-mark {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 18px rgba(239,68,68,0.45);
+    }
+
+    .header-brand { line-height: 1.1; }
+    .header-brand .name {
+      font-size: 1.05rem; font-weight: 800;
+      letter-spacing: -0.025em;
+    }
+    .header-brand .name span { color: #f97316; }
+    .header-brand .city {
+      font-size: 0.65rem; color: var(--text-muted);
+      font-weight: 400; letter-spacing: 0.05em;
+    }
+
+    /* ── Contenido principal (sidebar + mapa + lista) ── */
+    #main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Sidebar izquierdo — Estadísticas (solo desktop) ── */
+    #sidebar-stats {
+      width: 228px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow-y: auto;
+      z-index: 100;
+    }
+
+    .sidebar-section {
+      padding: 14px 14px 0;
+    }
+
+    .sidebar-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    /* ── Tarjeta de estadística ── */
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+      cursor: default;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.3);
+    }
+    .stat-number {
+      font-size: 1.9rem; font-weight: 800;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 0.67rem; color: var(--text-muted);
+      font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; margin-top: 3px;
+    }
+
+    /* ── Leyenda ── */
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.72rem; color: var(--text-sub);
+      margin-bottom: 7px;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ── Área del mapa ── */
+    #map-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #map { width: 100%; height: 100%; }
+
+    /* ── Sidebar derecho — Lista de reportes (solo desktop) ── */
+    #sidebar-list {
+      width: 268px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+    }
+    .sidebar-list-header {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       BOTONES DE FILTRO
+    ═══════════════════════════════════════════════════════ */
+    #filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+
+    .filter-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 0.72rem; font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .filter-btn:hover { border-color: rgba(255,255,255,0.22); color: var(--text); }
+    .filter-btn.f-all    { background: rgba(56,189,248,0.14);  border-color: #38bdf8; color: #38bdf8; }
+    .filter-btn.f-red    { background: rgba(239,68,68,0.14);   border-color: #ef4444; color: #ef4444; }
+    .filter-btn.f-brown  { background: rgba(146,64,14,0.2);    border-color: #b45309; color: var(--brown-light); }
+    .filter-btn.f-green  { background: rgba(16,185,129,0.14);  border-color: #10b981; color: #10b981; }
+
+    .dot-indicator {
+      width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+    }
+
+    /* ── Botón de actualizar ── */
+    #btn-refresh {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem; font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      transition: all 0.18s;
+      flex-shrink: 0;
+    }
+    #btn-refresh:hover { border-color: rgba(255,255,255,0.22); color: var(--text); }
+    #btn-refresh.spinning svg { animation: spin 0.7s linear infinite; }
+
+    /* ═══════════════════════════════════════════════════════
+       TARJETAS DE REPORTE (lista lateral)
+    ═══════════════════════════════════════════════════════ */
+    #reports-list { flex: 1; overflow-y: auto; }
+
+    .report-card {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.14s;
+    }
+    .report-card:hover { background: var(--surface2); }
+
+    .r-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 5px;
+    }
+    .r-date {
+      font-size: 0.63rem; color: var(--text-muted);
+      font-family: 'DM Mono', monospace; margin-bottom: 3px;
+    }
+    .r-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 2px 8px; border-radius: 99px;
+      font-size: 0.6rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      border: 1px solid;
+    }
+
+    /* ── Buscador ── */
+    .search-wrap { position: relative; }
+    .search-icon {
+      position: absolute; left: 10px; top: 50%;
+      transform: translateY(-50%); pointer-events: none;
+      color: var(--text-muted);
+    }
+    .search-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 7px 10px 7px 30px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.77rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    .search-input:focus { border-color: rgba(56,189,248,0.5); }
+    .search-input::placeholder { color: var(--text-muted); }
+
+    /* ═══════════════════════════════════════════════════════
+       CONTROLES FLOTANTES SOBRE EL MAPA (glassmorphism)
+    ═══════════════════════════════════════════════════════ */
+    .glass {
+      background: rgba(11, 15, 26, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: var(--radius);
+    }
+
+    /* ── Selector de capa base ── */
+    #layer-switcher {
+      position: absolute; top: 14px; right: 14px;
+      z-index: 1000;
+      padding: 8px;
+      display: flex; flex-direction: column; gap: 3px;
+      min-width: 130px;
+    }
+    .layer-lbl {
+      font-size: 0.58rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      font-weight: 700; padding: 0 2px 5px;
+    }
+    .layer-btn {
+      padding: 7px 10px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem; font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+      text-align: left;
+    }
+    .layer-btn:hover:not(.active) { background: rgba(255,255,255,0.05); color: var(--text); }
+    .layer-btn.active { background: rgba(56,189,248,0.14); border-color: rgba(56,189,248,0.4); color: #38bdf8; }
+
+    /* ── Recuadro de leyenda mobile (flotante sobre el mapa) ── */
+    #legend-float {
+      position: absolute; bottom: 50px; left: 14px;
+      z-index: 1000; padding: 10px 12px;
+      display: none; /* visible en mobile */
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       FAB: REPORTAR BACHE (Telegram)
+    ═══════════════════════════════════════════════════════ */
+    #fab-telegram {
+      position: fixed; bottom: 24px; right: 24px;
+      z-index: 2000;
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--telegram);
+      color: #fff;
+      padding: 13px 20px;
+      border-radius: 99px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.85rem; font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 6px 28px rgba(42,171,238,0.55);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border: none; cursor: pointer;
+      letter-spacing: 0.01em;
+    }
+    #fab-telegram:hover {
+      transform: translateY(-3px) scale(1.03);
+      box-shadow: 0 10px 36px rgba(42,171,238,0.65);
+    }
+    #fab-telegram:active { transform: scale(0.97); }
+
+    /* ── Pulso animado en el FAB ── */
+    #fab-telegram::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 99px;
+      border: 2px solid rgba(42,171,238,0.4);
+      animation: pulse-ring 2s ease-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(1); opacity: 0.7; }
+      100% { transform: scale(1.18); opacity: 0; }
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       OVERLAYS: CARGA Y ERROR
+    ═══════════════════════════════════════════════════════ */
+    #loading-overlay {
+      position: absolute; inset: 0; z-index: 9500;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(56,189,248,0.15);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #error-overlay {
+      position: absolute; inset: 0; z-index: 9500;
+      background: rgba(11,15,26,0.95);
+      backdrop-filter: blur(10px);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; text-align: center; padding: 28px;
+    }
+    .error-icon-wrap {
+      width: 64px; height: 64px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .retry-btn {
+      margin-top: 4px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px;
+      padding: 10px 28px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.18s;
+    }
+    .retry-btn:hover { opacity: 0.88; }
+
+    /* ── Skeleton de carga ── */
+    .skeleton {
+      background: linear-gradient(
+        90deg,
+        var(--surface2) 25%,
+        rgba(255,255,255,0.04) 50%,
+        var(--surface2) 75%
+      );
+      background-size: 200% 100%;
+      animation: skel-wave 1.4s ease-in-out infinite;
+      border-radius: 8px;
+    }
+    @keyframes skel-wave {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       POPUP DEL MAPA (override estilos Leaflet)
+    ═══════════════════════════════════════════════════════ */
+    .leaflet-popup-content-wrapper {
+      background: var(--surface2) !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.7) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      width: 262px !important;
+    }
+    .leaflet-popup-tip-container { display: none !important; }
+    .leaflet-popup-close-button {
+      color: var(--text-muted) !important;
+      font-size: 20px !important;
+      right: 8px !important; top: 6px !important;
+      z-index: 10;
+      text-shadow: none !important;
+    }
+    .leaflet-popup-close-button:hover { color: var(--text) !important; }
+
+    /* ─ Barra de gravedad ─ */
+    .grav-bar {
+      height: 4px; border-radius: 2px;
+      flex: 1; transition: opacity 0.2s;
+    }
+
+    /* ─ Animación de aparición de marcadores ─ */
+    @keyframes markerPop {
+      0%   { transform: scale(0) translateY(-12px); opacity: 0; }
+      70%  { transform: scale(1.18) translateY(0);  opacity: 1; }
+      100% { transform: scale(1)   translateY(0);   opacity: 1; }
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       SCROLLBAR PERSONALIZADO
+    ═══════════════════════════════════════════════════════ */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+  /* ═══════════════════════════════════════════════════════
+       RESPONSIVE — MOBILE (≤ 768px)
+    ═══════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      /* Ocultar sidebars en mobile */
+      #sidebar-stats, #sidebar-list { display: none !important; }
+      /* Mostrar elementos mobile */
+      #mobile-stats { display: flex !important; }
+      #drawer-panel { display: flex !important; }
+      
+      /* Ocultar leyenda flotante para dar más espacio visual al mapa */
+      #legend-float { display: none !important; }
+
+      /* Empujar el control del "Mapa Base" hacia abajo para que no tape las estadísticas */
+/* El empujón definitivo e invisible */
+      .leaflet-top.leaflet-right {
+         padding-top: 90px !important; 
+      }
+      /* Hacer que el cajón de reportes pase por encima del botón azul al abrirse */
+      #drawer-panel { 
+         z-index: 2000 !important; 
+      }
+      
+      /* Darle un espacio al fondo de la lista de reportes para poder hacer scroll cómodo */
+      #drawer-panel > div:last-child { 
+         padding-bottom: 90px !important; 
+      }
+
+      /* Ajustes del Cuadro Blanco (Popup) para que no se salga de la pantalla */
+      .leaflet-popup-content { width: 230px !important; margin: 0 !important; }
+      .leaflet-popup-content > div > div:first-child { height: 115px !important; }
+
+      /* Ajustar Botón de Telegram para no tapar el panel de abajo */
+      #fab-telegram { bottom: 65px; right: 12px; padding: 10px 14px; font-size: 0.75rem; }
+
+      /* Filtros y cabecera más compactos */
+      #filter-bar .filter-btn { padding: 4px 8px; font-size: 0.65rem; }
+      #filter-bar .dot-indicator { display: none; }
+      .header-brand .name { font-size: 0.95rem; }
+      .header-brand .city { font-size: 0.55rem; }
+    }
+
+    @media (max-width: 480px) {
+      #filter-bar { gap: 4px; }
+      #header { padding: 0 10px; gap: 8px; }
+    }
+
+/* 1. Forzamos al contenedor de la derecha a dejar espacio arriba */
+      .leaflet-right {
+         padding-top: 160px !important; /* Espacio para que bajen las estadísticas */
+         display: flex !important;
+         flex-direction: column !important;
+         align-items: flex-end !important;
+      }
+
+      /* 2. Empujamos el botón de Mapa Base específicamente */
+      .leaflet-control-layers {
+         margin-top: 10px !important;
+         margin-right: 10px !important;
+      }
+
+      /* 3. Nos aseguramos de que nada lo regrese a su sitio */
+      .leaflet-top.leaflet-right {
+         top: 0 !important;
+      }
+    /* ═══════════════════════════════════════════════════════
+       MOBILE: Estadísticas flotantes sobre el mapa
+    ═══════════════════════════════════════════════════════ */
+    #mobile-stats {
+      display: none;
+      position: absolute;
+      top: 10px; left: 10px; right: 10px;
+      z-index: 500;
+      gap: 6px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    #mobile-stats::-webkit-scrollbar { display: none; }
+
+    .mobile-stat-pill {
+      flex-shrink: 0;
+      background: rgba(11,15,26,0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 12px;
+      padding: 7px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 1px;
+    }
+    .mobile-stat-n {
+      font-size: 1.15rem; font-weight: 800;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: -0.03em; line-height: 1;
+    }
+    .mobile-stat-l {
+      font-size: 0.58rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       MOBILE: Drawer inferior de reportes
+    ═══════════════════════════════════════════════════════ */
+    #drawer-panel {
+      display: none; /* visible solo en mobile */
+      position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 1600;
+      background: var(--surface);
+      border-top: 1px solid var(--border2);
+      border-radius: 18px 18px 0 0;
+      flex-direction: column;
+      transform: translateY(calc(100% - 52px));
+      transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+      max-height: 68vh;
+      will-change: transform;
+    }
+    #drawer-panel.open { transform: translateY(0); }
+    #drawer-panel.open #drawer-arrow { transform: rotate(180deg); }
+
+    .drawer-handle-area {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+      height: 52px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .drawer-handle {
+      width: 36px; height: 4px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 2px;
+      position: absolute; left: 50%; transform: translateX(-50%);
+      top: 14px;
+    }
+    #drawer-arrow {
+      color: var(--text-muted);
+      transition: transform 0.32s;
+      margin-left: auto;
+    }
+    #drawer-title {
+      font-size: 0.8rem; font-weight: 700; margin-left: 10px;
+    }
+    #drawer-count {
+      font-size: 0.65rem; color: var(--text-muted);
+    }
+    #drawer-body {
+      flex: 1; overflow-y: auto;
+      padding-bottom: 20px;
+      display: flex; flex-direction: column;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       CONTROLES DEL MAPA (override Leaflet)
+    ═══════════════════════════════════════════════════════ */
+    .leaflet-control-zoom {
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .leaflet-control-zoom a {
+      background: rgba(11,15,26,0.85) !important;
+      backdrop-filter: blur(12px) !important;
+      color: var(--text-sub) !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      width: 32px !important; height: 32px !important;
+      line-height: 30px !important;
+      font-size: 16px !important;
+      transition: background 0.15s !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: rgba(56,189,248,0.2) !important;
+      color: #38bdf8 !important;
+    }
+    .leaflet-control-zoom-in { border-radius: 8px 8px 0 0 !important; }
+    .leaflet-control-zoom-out { border-radius: 0 0 8px 8px !important; }
+
+    /* ─ Forzar fondo opaco en atribución del mapa ─ */
+    .leaflet-control-attribution {
+      background: rgba(11,15,26,0.75) !important;
+      color: var(--text-muted) !important;
+      font-size: 10px !important;
+    }
+    .leaflet-control-attribution a { color: var(--accent) !important; }
+
+    /* ═══════════════════════════════════════════════════════
+       TOAST — Notificación flotante (confirmación de reporte)
+    ═══════════════════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 4000;
+      display: flex; flex-direction: column; gap: 8px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .toast {
+      display: flex; align-items: center; gap: 9px;
+      padding: 11px 18px;
+      border-radius: 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.78rem; font-weight: 600;
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+      background: rgba(11,15,26,0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.1);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.exito  { border-color: rgba(16,185,129,0.4); }
+    .toast.error  { border-color: rgba(239,68,68,0.4); }
+    .toast.aviso  { border-color: rgba(245,158,11,0.4); }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════════════════════════════════════════════
+       HEADER: Logo + Marca + Filtros + Actualizar
+  ══════════════════════════════════════════════════════ -->
+  <header id="header">
+
+    <!-- Logo -->
+    <div class="logo-mark">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+
+    <!-- Marca -->
+    <div class="header-brand">
+      <div class="name">Bache<span>Seguro</span></div>
+      <div class="city">Loja, Ecuador — Monitoreo Vial Ciudadano</div>
+    </div>
+
+    <!-- Barra de filtros -->
+    <div id="filter-bar">
+      <button class="filter-btn f-all" data-filter="all" onclick="setFilter('all', this)">
+        <span class="dot-indicator" style="background:#38bdf8;"></span> Todos
+      </button>
+      <button class="filter-btn" data-filter="critico" onclick="setFilter('critico', this)">
+        <span class="dot-indicator" style="background:#ef4444;"></span> Críticos
+      </button>
+      <button class="filter-btn" data-filter="tierra" onclick="setFilter('tierra', this)">
+        <span class="dot-indicator" style="background:#92400e;"></span> Tierra
+      </button>
+      <button class="filter-btn" data-filter="solucionado" onclick="setFilter('solucionado', this)">
+        <span class="dot-indicator" style="background:#10b981;"></span> Solucionados
+      </button>
+      <button id="btn-refresh" onclick="loadData()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        Actualizar
+      </button>
+    </div>
+
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════
+       MAIN: 3 columnas — Stats | Mapa | Lista
+  ══════════════════════════════════════════════════════ -->
+  <div id="main">
+
+    <!-- ── Sidebar izquierdo — Estadísticas ── -->
+    <aside id="sidebar-stats">
+      <div class="sidebar-section" style="padding-top:16px;">
+        <div class="sidebar-label">Estadísticas</div>
+
+        <div class="stat-card" style="border-color: rgba(255,255,255,0.1);">
+          <div class="stat-number" id="cnt-total" style="color: var(--text);">—</div>
+          <div class="stat-label">Total Reportes</div>
+        </div>
+
+        <div class="stat-card" style="border-color: rgba(239,68,68,0.25);">
+          <div class="stat-number" id="cnt-criticos" style="color: #ef4444;">—</div>
+          <div class="stat-label">🔴 Críticos (Grav. ≥ 4)</div>
+        </div>
+
+        <div class="stat-card" style="border-color: rgba(245,158,11,0.25);">
+          <div class="stat-number" id="cnt-moderados" style="color: #f59e0b;">—</div>
+          <div class="stat-label">🟠 Moderados</div>
+        </div>
+
+        <div class="stat-card" style="border-color: rgba(146,64,14,0.3);">
+          <div class="stat-number" id="cnt-tierra" style="color: var(--brown-light);">—</div>
+          <div class="stat-label">🟫 Tierra / Lastre</div>
+        </div>
+
+        <div class="stat-card" style="border-color: rgba(16,185,129,0.25);">
+          <div class="stat-number" id="cnt-solucionados" style="color: #10b981;">—</div>
+          <div class="stat-label">✅ Solucionados</div>
+        </div>
+      </div>
+
+      <!-- Skeletons durante carga -->
+      <div id="skeleton-stats" class="sidebar-section" style="display:none; padding-bottom:16px;">
+        <div class="skeleton" style="height:70px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:70px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:70px;"></div>
+      </div>
+
+      <!-- Leyenda de colores -->
+      <div class="sidebar-section" style="padding-bottom:16px; padding-top:14px;">
+        <div style="border-top: 1px solid var(--border); padding-top: 14px;">
+          <div class="sidebar-label">Leyenda</div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#ef4444;box-shadow:0 0 7px #ef4444;"></div>
+            Crítico — Pavimento, Grav. ≥ 4
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#f59e0b;box-shadow:0 0 7px #f59e0b;"></div>
+            Moderado — Pavimento, Grav. &lt; 4
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#8B4513;box-shadow:0 0 7px #8B4513;"></div>
+            Tierra / Lastre (sin importar grav.)
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#10b981;box-shadow:0 0 7px #10b981;"></div>
+            Solucionado
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Área del mapa ── -->
+    <div id="map-wrapper">
+      <div id="map"></div>
+
+      <!-- Estadísticas flotantes para mobile -->
+      <div id="mobile-stats">
+        <!-- Se renderiza dinámicamente con JS -->
+      </div>
+
+      <!-- Selector de capa base (glassmorphism) -->
+      <div id="layer-switcher" class="glass">
+        <div class="layer-lbl">Mapa base</div>
+        <button class="layer-btn active" data-layer="voyager" onclick="switchLayer('voyager',this)">🗺 Estándar</button>
+        <button class="layer-btn" data-layer="satellite" onclick="switchLayer('satellite',this)">🛰 Satélite</button>
+        <button class="layer-btn" data-layer="dark" onclick="switchLayer('dark',this)">🌙 Oscuro</button>
+      </div>
+
+      <!-- Leyenda flotante mobile -->
+      <div id="legend-float" class="glass" style="padding:10px 12px;">
+        <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:7px;">Leyenda</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444;box-shadow:0 0 5px #ef4444;"></div><span style="font-size:0.66rem;">Crítico</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;box-shadow:0 0 5px #f59e0b;"></div><span style="font-size:0.66rem;">Moderado</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8B4513;box-shadow:0 0 5px #8B4513;"></div><span style="font-size:0.66rem;">Tierra/Lastre</span></div>
+        <div class="legend-item" style="margin-bottom:0;"><div class="legend-dot" style="background:#10b981;box-shadow:0 0 5px #10b981;"></div><span style="font-size:0.66rem;">Solucionado</span></div>
+      </div>
+
+      <!-- ── Overlay de carga ── -->
+      <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div style="font-size:0.82rem;color:var(--text-muted);letter-spacing:0.02em;">Cargando reportes viales…</div>
+      </div>
+
+      <!-- ── Overlay de error ── -->
+      <div id="error-overlay">
+        <div class="error-icon-wrap">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div style="font-size:1rem;font-weight:700;">Error al cargar datos</div>
+        <div id="error-msg" style="font-size:0.8rem;color:var(--text-muted);max-width:300px;line-height:1.5;">
+          No se pudo conectar con la fuente de datos.
+        </div>
+        <button class="retry-btn" onclick="loadData()">Reintentar</button>
+      </div>
+    </div><!-- /map-wrapper -->
+
+    <!-- ── Sidebar derecho — Lista de Reportes ── -->
+    <aside id="sidebar-list">
+      <div class="sidebar-list-header">
+        <div class="sidebar-label" style="margin-bottom:10px;">Reportes Recientes</div>
+        <!-- Buscador -->
+        <div class="search-wrap">
+          <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" class="search-input" id="search-desktop"
+            placeholder="Buscar por suelo, estado…"
+            oninput="onSearch(this.value)" />
+        </div>
+      </div>
+      <!-- Skeletons durante carga -->
+      <div id="skeleton-list" style="padding:12px;">
+        <div class="skeleton" style="height:60px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:60px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:60px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:60px;margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:60px;"></div>
+      </div>
+      <!-- Lista real -->
+      <div id="reports-list" style="display:none; flex:1; overflow-y:auto;"></div>
+    </aside>
+
+  </div><!-- /main -->
+
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════════════════
+     FAB: Reportar Bache vía Telegram
+══════════════════════════════════════════════════════ -->
+<a href="https://t.me/MonitoreoVialLojaBot" target="_blank" rel="noopener noreferrer"
+   id="fab-telegram" title="Reportar un bache usando Telegram">
+  <!-- Icono de enviar (avión de papel) — color Telegram -->
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"
+       stroke-linecap="round" stroke-linejoin="round">
+    <path d="m22 2-7 20-4-9-9-4Z"/>
+    <path d="M22 2 11 13"/>
+  </svg>
+  Reportar Bache
+</a>
+
+<!-- ══════════════════════════════════════════════════════
+     TOAST: Contenedor de notificaciones flotantes
+     (usado por mostrarToast() al confirmar reportes)
+══════════════════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     MOBILE: Drawer inferior de reportes
+══════════════════════════════════════════════════════ -->
+<div id="drawer-panel">
+  <!-- Manija y cabecera del drawer -->
+  <div class="drawer-handle-area" onclick="toggleDrawer()">
+    <div class="drawer-handle"></div>
+    <span id="drawer-title">Reportes</span>
+    <span id="drawer-count" style="font-size:0.65rem;color:var(--text-muted);margin-left:6px;"></span>
+    <svg id="drawer-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"/>
+    </svg>
+  </div>
+  <!-- Buscador mobile -->
+  <div style="padding: 0 14px 10px; flex-shrink:0;">
+    <div class="search-wrap">
+      <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" class="search-input" id="search-mobile"
+        placeholder="Buscar…" oninput="onSearch(this.value)" />
+    </div>
+  </div>
+  <!-- Lista de reportes mobile -->
+  <div id="drawer-body">
+    <div id="reports-list-mobile"></div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     JAVASCRIPT — LÓGICA DE LA APLICACIÓN
+══════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   CONFIGURACIÓN GLOBAL
+═══════════════════════════════════════════════════════════ */
+const CFG = {
+  // URL del CSV publicado desde Google Sheets
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRhCeR93-B9RZXVEsIw29dnNeZ3bjZ-yBs9U5XyhYd4x6sVEaC2gp2Z2iIwL1u5PNbGVcQESk6iXNXf/pub?gid=0&single=true&output=csv',
+  // URL del Google Apps Script Web App que recibe los reportes de "información incorrecta"
+  // ⚠️ Reemplaza esto con tu propia URL después de desplegar el script (.gs) — ver instrucciones aparte
+  WEB_APP_URL: 'TU_URL_DE_APPS_SCRIPT_AQUI',
+  // Centro del mapa: Loja, Ecuador
+  MAP_CENTER: [-4.007, -79.202],
+  MAP_ZOOM: 13,
+  // Paleta de colores según la lógica de negocio
+  COLORS: {
+    CRITICO:    '#EF4444',
+    MODERADO:   '#F59E0B',
+    TIERRA:     '#8B4513',
+    SOLUCIONADO:'#10B981',
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════
+   ESTADO DE LA APLICACIÓN
+═══════════════════════════════════════════════════════════ */
+const APP = {
+  allData:      [],   // Todos los registros del CSV
+  filteredData: [],   // Registros visibles tras filtros
+  markers:      [],   // { marker: LeafletMarker, row, tipo }
+  activeFilter: 'all',
+  searchQuery:  '',
+  drawerOpen:   false,
+  map:          null,
+  markerGroup:  null,
+  baseLayers:   {},
+  currentBase:  null,
+};
+
+/* ═══════════════════════════════════════════════════════════
+   DEFINICIÓN DE CAPAS BASE
+═══════════════════════════════════════════════════════════ */
+const TILES = {
+  voyager: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    opts: { maxZoom: 20 },
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    opts: { maxZoom: 19 },
+  },
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    opts: { maxZoom: 20 },
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════
+   LÓGICA DE NEGOCIO — CLASIFICACIÓN POR COLOR
+   Reglas (en orden de prioridad):
+   1. Estado = "Solucionado"         → VERDE
+   2. Suelo = "Tierra" o "Lastre"    → CAFÉ
+   3. (Asfalto/Adoquín) Gravedad ≥ 4 → ROJO (Crítico)
+   4. (Asfalto/Adoquín) Gravedad < 4 → NARANJA (Moderado)
+═══════════════════════════════════════════════════════════ */
+function clasificar(row) {
+  const estado  = (row.Estado  || '').trim().toLowerCase();
+  const suelo   = (row.Suelo   || '').trim().toLowerCase();
+  const gravedad = parseInt(row.Gravedad) || 0;
+
+  if (estado === 'SOLUCIONADO') {
+    return { color: CFG.COLORS.SOLUCIONADO, tipo: 'SOLUCIONADO' };
+  }
+  if (suelo === 'tierra' || suelo === 'lastre') {
+    return { color: CFG.COLORS.TIERRA, tipo: 'tierra' };
+  }
+  if (gravedad >= 4) {
+    return { color: CFG.COLORS.CRITICO, tipo: 'critico' };
+  }
+  return { color: CFG.COLORS.MODERADO, tipo: 'moderado' };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CREAR ICONO DE MARCADOR PERSONALIZADO
+═══════════════════════════════════════════════════════════ */
+function crearIcono(color, tipo) {
+  // Marcadores más grandes para casos críticos
+  const sz = tipo === 'critico' ? 22 : (tipo === 'solucionado' ? 18 : 17);
+
+  // Icono de check para solucionados
+  const inner = tipo === 'solucionado'
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(sz*0.52)}" height="${Math.round(sz*0.52)}"
+         viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"
+         stroke-linecap="round" stroke-linejoin="round"
+         style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">
+         <polyline points="20 6 9 17 4 12"/>
+       </svg>`
+    : '';
+
+  // Glow según tipo
+  const glow = tipo !== 'solucionado'
+    ? `filter: drop-shadow(0 0 5px ${color}88);`
+    : '';
+
+  const html = `
+    <div style="
+      width:${sz}px; height:${sz}px;
+      background:${color};
+      border-radius:50%;
+      border:2.5px solid rgba(255,255,255,0.35);
+      position:relative;
+      ${glow}
+      animation: markerPop 0.38s cubic-bezier(0.34,1.56,0.64,1) both;
+    ">${inner}</div>`;
+
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize:   [sz, sz],
+    iconAnchor: [sz / 2, sz / 2],
+    popupAnchor:[0, -(sz / 2) - 4],
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONSTRUIR HTML DEL POPUP
+═══════════════════════════════════════════════════════════ */
+function construirPopup(row, info) {
+  const gravedad = parseInt(row.Gravedad) || 0;
+  const esResuelto = info.tipo === 'solucionado';
+  const fotoURL    = (row.URL_Foto || '').trim();
+  const fecha      = row.Fecha_Reporte
+    ? new Date(row.Fecha_Reporte).toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' })
+    : 'Sin fecha';
+  const gmaps = `https://www.google.com/maps?q=${row.Latitud},${row.Longitud}`;
+  // Identificador único del reporte (columna Message_ID) — usado para
+  // vincular el botón "Reportar Información" con su fila en el Sheet
+  const messageId = (row.Message_ID || '').toString().trim();
+
+  // Mapa de colores para el badge de tipo de suelo
+  const sueloPaleta = {
+    'asfalto':  { bg:'rgba(56,189,248,0.12)',  bd:'#38bdf8', tx:'#38bdf8'  },
+    'adoquín':  { bg:'rgba(167,139,250,0.12)', bd:'#a78bfa', tx:'#a78bfa'  },
+    'tierra':   { bg:'rgba(180,83,9,0.18)',    bd:'#b45309', tx:'#d97706'  },
+    'lastre':   { bg:'rgba(120,53,15,0.18)',   bd:'#92400e', tx:'#b45309'  },
+  };
+  const sc = sueloPaleta[(row.Suelo || '').toLowerCase()]
+    || { bg:'rgba(255,255,255,0.06)', bd:'rgba(255,255,255,0.15)', tx:'#94a3b8' };
+
+  // Barra de gravedad (5 segmentos)
+  const barColor = info.color;
+  let gravedadBar = '<div style="display:flex;gap:3px;margin-top:5px;">';
+  for (let i = 1; i <= 5; i++) {
+    const activo = i <= gravedad;
+    gravedadBar += `<div class="grav-bar" style="background:${activo ? barColor : 'rgba(255,255,255,0.08)'};${activo ? '' : 'opacity:0.5;'}"></div>`;
+  }
+  gravedadBar += '</div>';
+
+
+  
+  // Imagen o placeholder
+  // Función para extraer el ID y crear el enlace directo
+  // --- INICIO CÓDIGO ACTUALIZADO PARA DRIVE ---
+  function obtenerImagenDirecta(url) {
+      if (!url) return '';
+      if (url.includes('drive.google.com')) {
+          const fileId = url.split('/d/')[1]?.split('/')[0] || url.split('id=')[1]?.split('&')[0];
+          // NUEVO TRUCO: Usamos el servidor de miniaturas de Google (sz=w800 define el ancho)
+          if(fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+      }
+      return url;
+  }
+
+  const urlArreglada = obtenerImagenDirecta(fotoURL);
+
+  const imgBlock = urlArreglada
+    ? `<div style="width:100%;height:148px;overflow:hidden;border-radius:14px 14px 0 0;">
+         <img src="${urlArreglada}" alt="Foto del bache"
+              style="width:100%;height:100%;object-fit:cover;display:block;"
+              onerror="this.parentElement.innerHTML='<div style=height:100%;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#64748b>Error al cargar foto</div>'" />
+       </div>`
+    : `<div style="height:60px;background:rgba(255,255,255,0.04);border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#64748b;">Sin imagen</div>`;
+  // --- FIN CÓDIGO ACTUALIZADO PARA DRIVE ---
+
+
+  
+  return `
+    <div style="color:#e2e8f0;font-family:'Outfit',sans-serif;">
+      ${imgBlock}
+      <div style="padding:13px 14px 14px;">
+
+        <!-- Badges: suelo y estado -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;">
+          <span class="badge" style="background:${sc.bg};border-color:${sc.bd};color:${sc.tx};">
+            ${row.Suelo || 'N/A'}
+          </span>
+          <span class="badge" style="background:${esResuelto ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)'};
+            border-color:${esResuelto ? '#10b981' : '#f59e0b'};
+            color:${esResuelto ? '#10b981' : '#f59e0b'};">
+            ${esResuelto ? '✓ SOLUCIONADO' : '⏳ PENDIENTE'}
+          </span>
+        </div>
+
+        <!-- Fecha_Reporte -->
+        <div style="font-size:0.63rem;color:#64748b;font-family:'DM Mono',monospace;margin-bottom:10px;">
+          📅 ${fecha}
+        </div>
+
+        <!-- Gravedad -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:0.63rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin-bottom:3px;">
+            Gravedad ${gravedad}/5
+          </div>
+          ${gravedadBar}
+        </div>
+
+        <!-- Botón Google Maps -->
+        <a href="${gmaps}" target="_blank" rel="noopener noreferrer" style="
+          display:flex;align-items:center;justify-content:center;gap:7px;
+          width:100%;padding:9px 12px;
+          background:rgba(56,189,248,0.1);
+          border:1px solid rgba(56,189,248,0.28);
+          border-radius:10px;
+          color:#38bdf8;
+          font-size:0.75rem;font-weight:700;
+          text-decoration:none;
+          font-family:'Outfit',sans-serif;
+          transition:background 0.18s;
+        " onmouseover="this.style.background='rgba(56,189,248,0.2)'"
+           onmouseout="this.style.background='rgba(56,189,248,0.1)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          Abrir en Google Maps
+        </a>
+
+        <!-- Botón: Reportar foto/información incorrecta -->
+        <button onclick="reportarFoto(this, '${messageId}')" style="
+          display:flex;align-items:center;justify-content:center;gap:7px;
+          width:100%;padding:9px 12px;margin-top:7px;
+          background:rgba(239,68,68,0.07);
+          border:1px solid rgba(239,68,68,0.22);
+          border-radius:10px;
+          color:#94a3b8;
+          font-size:0.72rem;font-weight:600;
+          font-family:'Outfit',sans-serif;
+          cursor:pointer;
+          transition:background 0.18s, color 0.18s, border-color 0.18s;
+        " onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#ef4444';this.style.borderColor='rgba(239,68,68,0.4)'"
+           onmouseout="this.style.background='rgba(239,68,68,0.07)';this.style.color='#94a3b8';this.style.borderColor='rgba(239,68,68,0.22)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Reportar Información
+        </button>
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST — Notificación flotante no intrusiva
+   tipo: 'exito' | 'error' | 'aviso'
+═══════════════════════════════════════════════════════════ */
+function mostrarToast(mensaje, tipo = 'exito') {
+  const cont = document.getElementById('toast-container');
+  if (!cont) return;
+
+  const iconos = {
+    exito: '✅',
+    error: '⚠️',
+    aviso: 'ℹ️',
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${tipo}`;
+  toast.innerHTML = `<span>${iconos[tipo] || ''}</span><span>${mensaje}</span>`;
+  cont.appendChild(toast);
+
+  // Forzar reflow para que la animación de entrada se dispare
+  requestAnimationFrame(() => toast.classList.add('show'));
+
+  // Auto-remover después de 3.5s
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REPORTAR FOTO/INFORMACIÓN INCORRECTA
+   Envía Message_ID + comentario al Google Apps Script Web App,
+   que actualiza la columna REPORTADOS en la fila correspondiente.
+
+   btnEl:     referencia al <button> presionado (para feedback visual)
+   messageId: valor de row.Message_ID, ya convertido a string
+═══════════════════════════════════════════════════════════ */
+function reportarFoto(btnEl, messageId) {
+  // 1. Validar que el desarrollador ya configuró su URL de Apps Script
+  if (!CFG.WEB_APP_URL || CFG.WEB_APP_URL === 'TU_URL_DE_APPS_SCRIPT_AQUI') {
+    mostrarToast('Función no configurada: falta WEB_APP_URL en CFG.', 'aviso');
+    return;
+  }
+
+  // 2. Validar que el reporte tenga un identificador válido
+  if (!messageId) {
+    mostrarToast('Este reporte no tiene un identificador válido.', 'error');
+    return;
+  }
+
+  // 3. Pedir comentario opcional al usuario
+  const comentario = prompt('¿Por qué deseas reportar este reporte? (Opcional)');
+  if (comentario === null) return; // El usuario presionó "Cancelar"
+
+  // 4. Feedback visual inmediato en el botón mientras se envía
+  const textoOriginal = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.style.opacity = '0.6';
+  btnEl.innerHTML = 'Enviando…';
+
+  // 5. Enviar al Apps Script
+  //    Content-Type 'text/plain' evita el preflight CORS (OPTIONS),
+  //    igual que con la carga del CSV — Apps Script lo recibe sin bloqueos.
+  fetch(CFG.WEB_APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ messageId, comentario: comentario.trim() }),
+  })
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(data => {
+      if (data && data.success) {
+        mostrarToast('Reporte enviado con éxito. ¡Gracias por tu ayuda!', 'exito');
+        btnEl.innerHTML = '✓ Reportado';
+      } else {
+        mostrarToast((data && data.mensaje) || 'No se pudo registrar el reporte.', 'error');
+        btnEl.innerHTML = textoOriginal;
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+      }
+    })
+    .catch(err => {
+      console.error('[BacheSeguro] Error al enviar reporte:', err);
+      mostrarToast('Error de conexión. Intenta de nuevo más tarde.', 'error');
+      btnEl.innerHTML = textoOriginal;
+      btnEl.disabled = false;
+      btnEl.style.opacity = '1';
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INICIALIZACIÓN DEL MAPA LEAFLET
+═══════════════════════════════════════════════════════════ */
+function initMap() {
+
+  APP.map = L.map('map', {
+
+    center:      CFG.MAP_CENTER,
+
+    zoom:        CFG.MAP_ZOOM,
+
+    zoomControl: false,
+
+  });
+
+
+
+  // Zoom control en esquina inferior izquierda
+
+  L.control.zoom({ position: 'bottomleft' }).addTo(APP.map);
+
+
+
+  // Capa base inicial: Voyager (CartoDB Estándar — más limpio que OSM por defecto)
+
+  APP.currentBase = L.tileLayer(TILES.voyager.url, {
+
+    attribution: TILES.voyager.attr,
+
+    ...TILES.voyager.opts,
+
+  }).addTo(APP.map);
+
+
+
+  // Grupo de marcadores (fácil de limpiar y regenerar)
+
+  APP.markerGroup = L.layerGroup().addTo(APP.map);
+
+}
+  
+/* ═══════════════════════════════════════════════════════════
+   CAMBIO DE CAPA BASE DEL MAPA
+═══════════════════════════════════════════════════════════ */
+function switchLayer(key, btn) {
+  if (APP.currentBase) APP.map.removeLayer(APP.currentBase);
+  const def = TILES[key];
+  APP.currentBase = L.tileLayer(def.url, {
+    attribution: def.attr,
+    ...def.opts,
+  }).addTo(APP.map);
+  APP.currentBase.bringToBack();
+
+  // Resaltar botón activo
+  document.querySelectorAll('.layer-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDERIZAR MARCADORES EN EL MAPA
+═══════════════════════════════════════════════════════════ */
+function renderizarMarcadores(data) {
+  // Limpiar marcadores anteriores
+  APP.markerGroup.clearLayers();
+  APP.markers = [];
+
+  // Detectamos si es celular
+  const esCelular = window.innerWidth <= 768;
+
+  data.forEach((row) => {
+    const lat = parseFloat(row.Latitud);
+    const lon = parseFloat(row.Longitud);
+    if (isNaN(lat) || isNaN(lon)) return; // Coordenadas inválidas: omitir
+
+    const info  = clasificar(row);
+    const icono = crearIcono(info.color, info.tipo);
+
+    const marker = L.marker([lat, lon], { icon: icono })
+      .bindPopup(construirPopup(row, info), {
+        maxWidth:  esCelular ? 230 : 272,
+        minWidth:  esCelular ? 230 : 262,
+        // Si es celular, forzamos que el mapa lo mueva para que no lo tape la cabecera
+        autoPanPadding: esCelular ? L.point(10, 80) : L.point(20, 20),
+      });
+
+    APP.markerGroup.addLayer(marker);
+    APP.markers.push({ marker, row, info });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDERIZAR LISTA DE REPORTES (sidebar + drawer)
+═══════════════════════════════════════════════════════════ */
+function renderizarLista(data) {
+  const MAX_ITEMS = 60; // Limitar para rendimiento
+  const items = data.slice(0, MAX_ITEMS);
+
+  if (items.length === 0) {
+    const msg = `<div style="padding:28px;text-align:center;color:var(--text-muted);font-size:0.8rem;line-height:1.6;">
+      Sin resultados para los filtros actuales.<br>
+      <span style="font-size:0.72rem;">Prueba cambiando el filtro o la búsqueda.</span>
+    </div>`;
+    document.getElementById('reports-list').innerHTML = msg;
+    document.getElementById('reports-list-mobile').innerHTML = msg;
+    return;
+  }
+
+  const html = items.map((row) => {
+    const info    = clasificar(row);
+    const fecha   = row.Fecha_Reporte
+      ? new Date(row.Fecha_Reporte).toLocaleDateString('es-EC', { day:'2-digit', month:'short' })
+      : '—';
+    const gravedad = parseInt(row.Gravedad) || 0;
+    const lat = parseFloat(row.Latitud);
+    const lon = parseFloat(row.Longitud);
+
+    // Colores de badge dinámicos
+    const estadoOk = info.tipo === 'SOLUCIONADO';
+
+    return `
+      <div class="report-card" onclick="volarA(${lat},${lon})" title="Ver en el mapa">
+        <div class="r-dot" style="background:${info.color};box-shadow:0 0 6px ${info.color}88;margin-top:6px;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+            <span class="r-date">${fecha}</span>
+            <span style="font-size:0.6rem;color:var(--text-muted);font-family:'DM Mono',monospace;">
+              G${gravedad}/5
+            </span>
+          </div>
+          <div class="r-tags">
+            <span class="badge" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);color:#94a3b8;">${row.Suelo || 'N/A'}</span>
+            <span class="badge" style="background:${estadoOk ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'};
+              border-color:${estadoOk ? '#10b981' : '#f59e0b'};
+              color:${estadoOk ? '#10b981' : '#f59e0b'};">
+              ${row.Estado || 'N/A'}
+            </span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Mostrar en sidebar desktop y drawer mobile
+  document.getElementById('reports-list').innerHTML = html;
+  document.getElementById('reports-list-mobile').innerHTML = html;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VOLAR A COORDENADAS (clic en lista)
+═══════════════════════════════════════════════════════════ */
+function volarA(lat, lon) {
+  if (isNaN(lat) || isNaN(lon)) return;
+  APP.map.flyTo([lat, lon], 17, { duration: 1.1 });
+
+  // Abrir popup del marcador correspondiente
+  const found = APP.markers.find(m => {
+    const ll = m.marker.getLatLng();
+    return Math.abs(ll.lat - lat) < 0.0002 && Math.abs(ll.lng - lon) < 0.0002;
+  });
+  if (found) {
+    setTimeout(() => found.marker.openPopup(), 800);
+  }
+
+  // Cerrar drawer en mobile
+  cerrarDrawer();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ACTUALIZAR ESTADÍSTICAS EN SIDEBAR Y MOBILE
+═══════════════════════════════════════════════════════════ */
+function actualizarEstadisticas() {
+  const data = APP.allData;
+  const total       = data.length;
+  const criticos    = data.filter(r => clasificar(r).tipo === 'critico').length;
+  const moderados   = data.filter(r => clasificar(r).tipo === 'moderado').length;
+  const tierra      = data.filter(r => clasificar(r).tipo === 'tierra').length;
+  const resueltos   = data.filter(r => clasificar(r).tipo === 'solucionado').length;
+
+  // Sidebar desktop
+  document.getElementById('cnt-total').textContent      = total;
+  document.getElementById('cnt-criticos').textContent   = criticos;
+  document.getElementById('cnt-moderados').textContent  = moderados;
+  document.getElementById('cnt-tierra').textContent     = tierra;
+  document.getElementById('cnt-solucionados').textContent = resueltos;
+
+  // Pills flotantes mobile
+  document.getElementById('mobile-stats').innerHTML = [
+    { n: total,    l: 'Total',    c: '#38bdf8' },
+    { n: criticos, l: 'Críticos', c: '#ef4444' },
+    { n: moderados,l: 'Moder.',   c: '#f59e0b' },
+    { n: tierra,   l: 'Tierra',   c: '#d97706' },
+    { n: resueltos,l: '✅ OK',     c: '#10b981' },
+  ].map(p => `
+    <div class="mobile-stat-pill">
+      <span class="mobile-stat-n" style="color:${p.c};">${p.n}</span>
+      <span class="mobile-stat-l">${p.l}</span>
+    </div>
+  `).join('');
+
+  // Contador en drawer
+  document.getElementById('drawer-count').textContent = `${total} reportes`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   APLICAR FILTROS + BÚSQUEDA (reactivo)
+═══════════════════════════════════════════════════════════ */
+function aplicarFiltros() {
+  let data = [...APP.allData];
+
+  // Filtro de categoría
+  if (APP.activeFilter !== 'all') {
+    data = data.filter(row => clasificar(row).tipo === APP.activeFilter);
+  }
+
+  // Filtro de búsqueda (suelo, estado, ID del chat)
+  if (APP.searchQuery) {
+    const q = APP.searchQuery.toLowerCase();
+    data = data.filter(row =>
+      (row.Suelo   || '').toLowerCase().includes(q) ||
+      (row.Estado  || '').toLowerCase().includes(q) ||
+      (row.Chat_ID  || '').toLowerCase().includes(q) ||
+      (row.Gravedad || '').toString().includes(q)
+    );
+  }
+
+  APP.filteredData = data;
+  renderizarMarcadores(data);
+  renderizarLista(data);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MANEJADOR DE FILTROS (botones del header)
+═══════════════════════════════════════════════════════════ */
+function setFilter(filtro, btn) {
+  APP.activeFilter = filtro;
+
+  // Quitar clases activas de todos los botones de filtro
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.remove('f-all', 'f-red', 'f-brown', 'f-green');
+  });
+
+  // Aplicar clase activa al botón presionado
+  const mapa = { all: 'f-all', critico: 'f-red', tierra: 'f-brown', solucionado: 'f-green' };
+  btn.classList.add(mapa[filtro] || 'f-all');
+
+  aplicarFiltros();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUSCADOR (sincroniza desktop y mobile)
+═══════════════════════════════════════════════════════════ */
+function onSearch(value) {
+  APP.searchQuery = value.trim();
+
+  // Sincronizar ambos inputs de búsqueda
+  const iD = document.getElementById('search-desktop');
+  const iM = document.getElementById('search-mobile');
+  if (iD && iD.value !== value) iD.value = value;
+  if (iM && iM.value !== value) iM.value = value;
+
+  aplicarFiltros();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE DRAWER
+═══════════════════════════════════════════════════════════ */
+function toggleDrawer() {
+  APP.drawerOpen = !APP.drawerOpen;
+  document.getElementById('drawer-panel').classList.toggle('open', APP.drawerOpen);
+}
+function cerrarDrawer() {
+  APP.drawerOpen = false;
+  document.getElementById('drawer-panel').classList.remove('open');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS DE UI — Carga / Error
+═══════════════════════════════════════════════════════════ */
+function mostrarCargando(visible) {
+  document.getElementById('loading-overlay').style.display = visible ? 'flex' : 'none';
+  // Skeletons en sidebars
+  const skStats = document.getElementById('skeleton-stats');
+  const skList  = document.getElementById('skeleton-list');
+  const rlDesk  = document.getElementById('reports-list');
+  if (visible) {
+    if (skStats) skStats.style.display = 'block';
+    if (skList)  skList.style.display  = 'block';
+    if (rlDesk)  rlDesk.style.display  = 'none';
+  } else {
+    if (skStats) skStats.style.display = 'none';
+    if (skList)  skList.style.display  = 'none';
+    if (rlDesk)  rlDesk.style.display  = 'block';
+  }
+  // Spinner en botón de actualizar
+  const btn = document.getElementById('btn-refresh');
+  if (btn) btn.classList.toggle('spinning', visible);
+}
+
+function mostrarError(msg) {
+  document.getElementById('error-overlay').style.display = 'flex';
+  document.getElementById('error-msg').textContent = msg || 'Error desconocido.';
+}
+
+function ocultarError() {
+  document.getElementById('error-overlay').style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARGA DE DATOS (PapaParse → Google Sheets JSON)
+═══════════════════════════════════════════════════════════ */
+function loadData() {
+  mostrarCargando(true);
+  ocultarError();
+
+  // Añadir timestamp a la URL → el navegador no usa caché
+  // (Google ignora el parámetro desconocido y sirve el CSV igual)
+  const urlFresh = CFG.CSV_URL + '&nocache=' + Date.now();
+
+  fetch(urlFresh)           // ← Sin opciones: GET simple, sin headers extra → sin preflight CORS
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.text();    // Obtener el CSV como texto
+    })
+    .then(csvText => {
+      Papa.parse(csvText, {
+        header:         true,
+        skipEmptyLines: true,
+        complete: (resultado) => {
+          if (!resultado.data || resultado.data.length === 0) {
+            mostrarCargando(false);
+            mostrarError('El archivo CSV está vacío o no contiene datos válidos.');
+            return;
+          }
+          APP.allData      = resultado.data;
+          APP.filteredData = [...APP.allData];
+          actualizarEstadisticas();
+          aplicarFiltros();
+          mostrarCargando(false);
+        },
+        error: (err) => {
+          console.error('[BacheSeguro] Error al parsear CSV:', err);
+          mostrarCargando(false);
+          mostrarError('Error al procesar los datos. Intenta de nuevo.');
+        },
+      });
+    })
+    .catch(err => {
+      console.error('[BacheSeguro] Error al descargar CSV:', err);
+      mostrarCargando(false);
+      mostrarError('No se pudo conectar con la fuente de datos. Verifica tu conexión e intenta de nuevo.');
+    });
+}
+/* ═══════════════════════════════════════════════════════════
+   INICIALIZACIÓN DE LA APLICACIÓN
+═══════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Inicializar mapa
+  initMap();
+
+  // 2. Cargar datos desde el CSV
+  loadData();
+
+  // 3. Cerrar drawer al tocar el mapa en mobile
+  document.getElementById('map').addEventListener('click', () => {
+    if (APP.drawerOpen) cerrarDrawer();
+  });
+});
+</script>
+
+</body>
+</html>
