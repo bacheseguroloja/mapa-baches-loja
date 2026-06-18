@@ -677,6 +677,39 @@
       font-size: 10px !important;
     }
     .leaflet-control-attribution a { color: var(--accent) !important; }
+
+    /* ═══════════════════════════════════════════════════════
+       TOAST — Notificación flotante (confirmación de reporte)
+    ═══════════════════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 4000;
+      display: flex; flex-direction: column; gap: 8px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .toast {
+      display: flex; align-items: center; gap: 9px;
+      padding: 11px 18px;
+      border-radius: 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.78rem; font-weight: 600;
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+      background: rgba(11,15,26,0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.1);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.exito  { border-color: rgba(16,185,129,0.4); }
+    .toast.error  { border-color: rgba(239,68,68,0.4); }
+    .toast.aviso  { border-color: rgba(245,158,11,0.4); }
   </style>
 </head>
 <body>
@@ -889,6 +922,12 @@
 </a>
 
 <!-- ══════════════════════════════════════════════════════
+     TOAST: Contenedor de notificaciones flotantes
+     (usado por mostrarToast() al confirmar reportes)
+══════════════════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+<!-- ══════════════════════════════════════════════════════
      MOBILE: Drawer inferior de reportes
 ══════════════════════════════════════════════════════ -->
 <div id="drawer-panel">
@@ -932,6 +971,9 @@
 const CFG = {
   // URL del CSV publicado desde Google Sheets
   CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRhCeR93-B9RZXVEsIw29dnNeZ3bjZ-yBs9U5XyhYd4x6sVEaC2gp2Z2iIwL1u5PNbGVcQESk6iXNXf/pub?gid=0&single=true&output=csv',
+  // URL del Google Apps Script Web App que recibe los reportes de "información incorrecta"
+  // ⚠️ Reemplaza esto con tu propia URL después de desplegar el script (.gs) — ver instrucciones aparte
+  WEB_APP_URL: 'TU_URL_DE_APPS_SCRIPT_AQUI',
   // Centro del mapa: Loja, Ecuador
   MAP_CENTER: [-4.007, -79.202],
   MAP_ZOOM: 13,
@@ -1059,6 +1101,9 @@ function construirPopup(row, info) {
     ? new Date(row.Fecha_Reporte).toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' })
     : 'Sin fecha';
   const gmaps = `https://www.google.com/maps?q=${row.Latitud},${row.Longitud}`;
+  // Identificador único del reporte (columna Message_ID) — usado para
+  // vincular el botón "Reportar Información" con su fila en el Sheet
+  const messageId = (row.Message_ID || '').toString().trim();
 
   // Mapa de colores para el badge de tipo de suelo
   const sueloPaleta = {
@@ -1157,8 +1202,122 @@ function construirPopup(row, info) {
           </svg>
           Abrir en Google Maps
         </a>
+
+        <!-- Botón: Reportar foto/información incorrecta -->
+        <button onclick="reportarFoto(this, '${messageId}')" style="
+          display:flex;align-items:center;justify-content:center;gap:7px;
+          width:100%;padding:9px 12px;margin-top:7px;
+          background:rgba(239,68,68,0.07);
+          border:1px solid rgba(239,68,68,0.22);
+          border-radius:10px;
+          color:#94a3b8;
+          font-size:0.72rem;font-weight:600;
+          font-family:'Outfit',sans-serif;
+          cursor:pointer;
+          transition:background 0.18s, color 0.18s, border-color 0.18s;
+        " onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#ef4444';this.style.borderColor='rgba(239,68,68,0.4)'"
+           onmouseout="this.style.background='rgba(239,68,68,0.07)';this.style.color='#94a3b8';this.style.borderColor='rgba(239,68,68,0.22)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Reportar Información
+        </button>
       </div>
     </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST — Notificación flotante no intrusiva
+   tipo: 'exito' | 'error' | 'aviso'
+═══════════════════════════════════════════════════════════ */
+function mostrarToast(mensaje, tipo = 'exito') {
+  const cont = document.getElementById('toast-container');
+  if (!cont) return;
+
+  const iconos = {
+    exito: '✅',
+    error: '⚠️',
+    aviso: 'ℹ️',
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${tipo}`;
+  toast.innerHTML = `<span>${iconos[tipo] || ''}</span><span>${mensaje}</span>`;
+  cont.appendChild(toast);
+
+  // Forzar reflow para que la animación de entrada se dispare
+  requestAnimationFrame(() => toast.classList.add('show'));
+
+  // Auto-remover después de 3.5s
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REPORTAR FOTO/INFORMACIÓN INCORRECTA
+   Envía Message_ID + comentario al Google Apps Script Web App,
+   que actualiza la columna REPORTADOS en la fila correspondiente.
+
+   btnEl:     referencia al <button> presionado (para feedback visual)
+   messageId: valor de row.Message_ID, ya convertido a string
+═══════════════════════════════════════════════════════════ */
+function reportarFoto(btnEl, messageId) {
+  // 1. Validar que el desarrollador ya configuró su URL de Apps Script
+  if (!CFG.WEB_APP_URL || CFG.WEB_APP_URL === 'TU_URL_DE_APPS_SCRIPT_AQUI') {
+    mostrarToast('Función no configurada: falta WEB_APP_URL en CFG.', 'aviso');
+    return;
+  }
+
+  // 2. Validar que el reporte tenga un identificador válido
+  if (!messageId) {
+    mostrarToast('Este reporte no tiene un identificador válido.', 'error');
+    return;
+  }
+
+  // 3. Pedir comentario opcional al usuario
+  const comentario = prompt('¿Por qué deseas reportar este reporte? (Opcional)');
+  if (comentario === null) return; // El usuario presionó "Cancelar"
+
+  // 4. Feedback visual inmediato en el botón mientras se envía
+  const textoOriginal = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.style.opacity = '0.6';
+  btnEl.innerHTML = 'Enviando…';
+
+  // 5. Enviar al Apps Script
+  //    Content-Type 'text/plain' evita el preflight CORS (OPTIONS),
+  //    igual que con la carga del CSV — Apps Script lo recibe sin bloqueos.
+  fetch(CFG.WEB_APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ messageId, comentario: comentario.trim() }),
+  })
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(data => {
+      if (data && data.success) {
+        mostrarToast('Reporte enviado con éxito. ¡Gracias por tu ayuda!', 'exito');
+        btnEl.innerHTML = '✓ Reportado';
+      } else {
+        mostrarToast((data && data.mensaje) || 'No se pudo registrar el reporte.', 'error');
+        btnEl.innerHTML = textoOriginal;
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+      }
+    })
+    .catch(err => {
+      console.error('[BacheSeguro] Error al enviar reporte:', err);
+      mostrarToast('Error de conexión. Intenta de nuevo más tarde.', 'error');
+      btnEl.innerHTML = textoOriginal;
+      btnEl.disabled = false;
+      btnEl.style.opacity = '1';
+    });
 }
 
 /* ═══════════════════════════════════════════════════════════
